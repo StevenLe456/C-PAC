@@ -1,0 +1,239 @@
+%YAML 1.1
+---
+# CPAC Pipeline Configuration YAML file
+# Version 1.8.0
+#
+# http://fcp-indi.github.io for more info.
+#
+# Tip: This file can be edited manually with a text editor for quick modifications.
+
+FROM: default
+
+
+pipeline_setup: 
+
+  # Name for this pipeline configuration - useful for identification.
+  pipeline_name: ndmg
+
+  log_directory: 
+
+    path: /tmp
+
+  system_config: 
+
+    # The number of cores to allocate to ANTS-based anatomical registration per participant.
+    # - Multiple cores can greatly speed up this preprocessing step.
+    # - This number cannot be greater than the number of cores per participant.
+    num_ants_threads: 4
+
+anatomical_preproc: 
+
+  # Non-local means filtering via ANTs DenoiseImage
+  non_local_means_filtering: Off
+
+  # N4 bias field correction via ANTs
+  n4_bias_field_correction: Off
+
+segmentation: 
+
+  tissue_segmentation: 
+
+    # option parameters
+    FSL-FAST: 
+
+      use_priors: 
+
+        # Full path to a directory containing binarized prior probability maps.
+        # These maps are included as part of the 'Image Resource Files' package available on the Install page of the User Guide.
+        # It is not necessary to change this path unless you intend to use non-standard priors.
+        priors_path: $FSLDIR/data/standard/tissuepriors/2mm
+
+    Template_Based: 
+
+      # These masks should be in the same space of your registration template, e.g. if
+      # you choose 'EPI Template' , below tissue masks should also be EPI template tissue masks.
+      #
+      # Options: ['T1_Template', 'EPI_Template']
+      template_for_segmentation: []
+
+      # These masks are included as part of the 'Image Resource Files' package available
+      # on the Install page of the User Guide.
+
+      # Full path to a binarized White Matter mask.
+      WHITE: $FSLDIR/data/standard/tissuepriors/2mm/avg152T1_white_bin.nii.gz
+
+      # Full path to a binarized Gray Matter mask.
+      GRAY: $FSLDIR/data/standard/tissuepriors/2mm/avg152T1_gray_bin.nii.gz
+
+      # Full path to a binarized CSF mask.
+      CSF: $FSLDIR/data/standard/tissuepriors/2mm/avg152T1_csf_bin.nii.gz
+
+registration_workflows: 
+
+  anatomical_registration: 
+
+    registration: 
+
+      # using: ['ANTS', 'FSL', 'FSL-linear']
+      # this is a fork point
+      #   selecting both ['ANTS', 'FSL'] will run both and fork the pipeline
+      using: [FSL]
+
+      # option parameters
+      ANTs: 
+
+        # ANTs parameters for T1-template-based registration
+        T1_registration: 
+
+  functional_registration: 
+
+    EPI_registration: 
+
+      ANTs: 
+
+        # EPI registration configuration - synonymous with T1_registration
+        # parameters under anatomical registration above
+        parameters: 
+
+    func_registration_to_template: 
+
+      output_resolution: 
+
+        # The resolution (in mm) to which the preprocessed, registered functional timeseries outputs are written into.
+        # NOTE:
+        #   selecting a 1 mm or 2 mm resolution might substantially increase your RAM needs- these resolutions should be selected with caution.
+        #   for most cases, 3 mm or 4 mm resolutions are suggested.
+        # NOTE:
+        #   this also includes the single-volume 3D preprocessed functional data,
+        #   such as the mean functional (mean EPI) in template space
+        func_preproc_outputs: 2mm
+
+        # The resolution (in mm) to which the registered derivative outputs are written into.
+        # NOTE:
+        #   this is for the single-volume functional-space outputs (i.e. derivatives)
+        #   thus, a higher resolution may not result in a large increase in RAM needs as above
+        func_derivative_outputs: 2mm
+
+functional_preproc: 
+
+  distortion_correction: 
+
+    # using: ['PhaseDiff', 'Blip']
+    #   PhaseDiff - Perform field map correction using a single phase difference image, a subtraction of the two phase images from each echo. Default scanner for this method is SIEMENS.
+    #   Blip - Uses AFNI 3dQWarp to calculate the distortion unwarp for EPI field maps of opposite/same phase encoding direction.
+    #   NOTE:
+    #     this is NOT a fork point - instead, the technique used will depend on what type of distortion correction field data accompanies the dataset
+    #     for example, phase-difference field maps will lead to phase-difference distortion correction, and phase-encoding direction field maps will lead to blip-up/blip-down
+    using: []
+
+nuisance_corrections: 
+
+  2-nuisance_regression: 
+
+    # Select which nuisance signal corrections to apply
+    Regressors: 
+      - Bandpass:
+          bottom_frequency: 0.01
+          top_frequency: 0.1
+        CerebrospinalFluid:
+          extraction_resolution: 2
+          summary: Mean
+        Name: Regressor-1
+        PolyOrt:
+          degree: 2
+        aCompCor:
+          extraction_resolution: 2
+          summary:
+            components: 5
+            method: DetrendPC
+          tissues:
+          - WhiteMatter
+          - CerebrospinalFluid
+
+timeseries_extraction: 
+
+  # Enter paths to region-of-interest (ROI) NIFTI files (.nii or .nii.gz) to be used for time-series extraction, and then select which types of analyses to run.
+  # Denote which analyses to run for each ROI path by listing the names below. For example, if you wish to run Avg and SpatialReg, you would enter: '/path/to/ROI.nii.gz': Avg, SpatialReg
+  # available analyses:
+  #   /path/to/atlas.nii.gz: Avg, Voxel, SpatialReg, PearsonCorr, PartialCorr
+  tse_roi_paths: 
+    /ndmg_atlases/label/Human/AAL_space-MNI152NLin6_res-2x2x2.nii.gz: Avg
+    /ndmg_atlases/label/Human/Brodmann_space-MNI152NLin6_res-2x2x2.nii.gz: Avg
+    /ndmg_atlases/label/Human/CPAC200_space-MNI152NLin6_res-2x2x2.nii.gz: Avg
+    /ndmg_atlases/label/Human/Desikan_space-MNI152NLin6_res-2x2x2.nii.gz: Avg
+    /ndmg_atlases/label/Human/DKT_space-MNI152NLin6_res-2x2x2.nii.gz: Avg
+    /ndmg_atlases/label/Human/DS00071_space-MNI152NLin6_res-2x2x2.nii.gz: Avg
+    /ndmg_atlases/label/Human/DS00096_space-MNI152NLin6_res-2x2x2.nii.gz: Avg
+    /ndmg_atlases/label/Human/DS00108_space-MNI152NLin6_res-2x2x2.nii.gz: Avg
+    /ndmg_atlases/label/Human/DS00140_space-MNI152NLin6_res-2x2x2.nii.gz: Avg
+    /ndmg_atlases/label/Human/DS00195_space-MNI152NLin6_res-2x2x2.nii.gz: Avg
+    /ndmg_atlases/label/Human/DS00278_space-MNI152NLin6_res-2x2x2.nii.gz: Avg
+    /ndmg_atlases/label/Human/DS00350_space-MNI152NLin6_res-2x2x2.nii.gz: Avg
+    /ndmg_atlases/label/Human/DS00446_space-MNI152NLin6_res-2x2x2.nii.gz: Avg
+    /ndmg_atlases/label/Human/DS00583_space-MNI152NLin6_res-2x2x2.nii.gz: Avg
+    /ndmg_atlases/label/Human/DS00833_space-MNI152NLin6_res-2x2x2.nii.gz: Avg
+    /ndmg_atlases/label/Human/DS01216_space-MNI152NLin6_res-2x2x2.nii.gz: Avg
+    /ndmg_atlases/label/Human/HarvardOxfordcort-maxprob-thr25_space-MNI152NLin6_res-2x2x2.nii.gz: Avg
+    /ndmg_atlases/label/Human/HarvardOxfordsub-maxprob-thr25_space-MNI152NLin6_res-2x2x2.nii.gz: Avg
+    /ndmg_atlases/label/Human/JHU_space-MNI152NLin6_res-2x2x2.nii.gz: Avg
+    /ndmg_atlases/label/Human/Princetonvisual-top_space-MNI152NLin6_res-2x2x2.nii.gz: Avg
+
+seed_based_correlation_analysis: 
+
+  # SCA - Seed-Based Correlation Analysis
+  # For each extracted ROI Average time series, CPAC will generate a whole-brain correlation map.
+  # It should be noted that for a given seed/ROI, SCA maps for ROI Average time series will be the same.
+  run: Off
+
+amplitude_low_frequency_fluctuation: 
+
+  # ALFF & f/ALFF
+  # Calculate Amplitude of Low Frequency Fluctuations (ALFF) and and fractional ALFF (f/ALFF) for all voxels.
+  run: Off
+
+regional_homogeneity: 
+
+  # ReHo
+  # Calculate Regional Homogeneity (ReHo) for all voxels.
+  run: Off
+
+voxel_mirrored_homotopic_connectivity: 
+
+  # VMHC
+  # Calculate Voxel-mirrored Homotopic Connectivity (VMHC) for all voxels.
+  run: Off
+
+  symmetric_registration: 
+
+    # Included as part of the 'Image Resource Files' package available on the Install page of the User Guide.
+    # It is not necessary to change this path unless you intend to use a non-standard symmetric template.
+    T1w_brain_template_symmetric: $FSLDIR/data/standard/MNI152_T1_${resolution_for_anat}_brain_symmetric.nii.gz
+
+    # A reference symmetric brain template for resampling
+    T1w_brain_template_symmetric_for_resample: $FSLDIR/data/standard/MNI152_T1_1mm_brain_symmetric.nii.gz
+
+    # Included as part of the 'Image Resource Files' package available on the Install page of the User Guide.
+    # It is not necessary to change this path unless you intend to use a non-standard symmetric template.
+    T1w_template_symmetric: $FSLDIR/data/standard/MNI152_T1_${resolution_for_anat}_symmetric.nii.gz
+
+    # A reference symmetric skull template for resampling
+    T1w_template_symmetric_for_resample: $FSLDIR/data/standard/MNI152_T1_1mm_symmetric.nii.gz
+
+    # Included as part of the 'Image Resource Files' package available on the Install page of the User Guide.
+    # It is not necessary to change this path unless you intend to use a non-standard symmetric template.
+    dilated_symmetric_brain_mask: $FSLDIR/data/standard/MNI152_T1_${resolution_for_anat}_brain_mask_symmetric_dil.nii.gz
+
+    # A reference symmetric brain mask template for resampling
+    dilated_symmetric_brain_mask_for_resample: $FSLDIR/data/standard/MNI152_T1_1mm_brain_mask_symmetric_dil.nii.gz
+
+network_centrality: 
+
+  # Calculate Degree, Eigenvector Centrality, or Functional Connectivity Density.
+  run: Off
+
+# PACKAGE INTEGRATIONS
+# --------------------
+PyPEER: 
+
+  # Template-space eye mask
+  eye_mask_path: $FSLDIR/data/standard/MNI152_T1_${func_resolution}_eye_mask.nii.gz
